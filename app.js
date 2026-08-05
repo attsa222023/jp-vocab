@@ -224,6 +224,8 @@ const wordListEl = document.getElementById('wordList');
 const searchInput = document.getElementById('searchInput');
 const wordCountEl = document.getElementById('wordCount');
 
+let editingId = null;
+
 searchInput.addEventListener('input', renderList);
 
 function renderList() {
@@ -246,6 +248,8 @@ function renderList() {
 
   const today = todayStr();
   wordListEl.innerHTML = filtered.map((w) => {
+    if (w.id === editingId) return renderEditForm(w);
+
     const isDue = w.srs.dueDate <= today;
     return `
       <li class="word-item" data-id="${w.id}">
@@ -257,7 +261,10 @@ function renderList() {
         ${w.note ? `<div class="word-item-note">${escapeHtml(w.note)}</div>` : ''}
         <div class="word-item-meta">
           <span class="due-tag ${isDue ? 'due-now' : ''}">${isDue ? '待複習' : '下次複習：' + w.srs.dueDate}</span>
-          <span class="word-item-actions"><button data-action="delete">刪除</button></span>
+          <span class="word-item-actions">
+            <button data-action="edit">編輯</button>
+            <button data-action="delete">刪除</button>
+          </span>
         </div>
       </li>
     `;
@@ -271,10 +278,82 @@ function renderList() {
       if (target && confirm(`確定要刪除「${target.word}」嗎？`)) {
         words = words.filter((w) => w.id !== id);
         saveWords(words);
+        if (editingId === id) editingId = null;
         renderList();
         refreshDueBadge();
       }
     });
+  });
+
+  wordListEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const li = e.target.closest('.word-item');
+      editingId = li.dataset.id;
+      renderList();
+    });
+  });
+
+  if (editingId) attachEditFormHandlers();
+}
+
+function renderEditForm(w) {
+  return `
+    <li class="word-item word-item-editing" data-id="${w.id}">
+      <form class="edit-form" data-id="${w.id}">
+        <div class="field">
+          <label>單字 / 漢字</label>
+          <input name="word" type="text" value="${escapeHtml(w.word)}" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label>讀音（假名）</label>
+          <input name="reading" type="text" value="${escapeHtml(w.reading)}" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>意思</label>
+          <input name="meaning" type="text" value="${escapeHtml(w.meaning)}" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label>備註 / 例句（選填）</label>
+          <textarea name="note" rows="2">${escapeHtml(w.note)}</textarea>
+        </div>
+        <div class="edit-form-actions">
+          <button type="submit" class="primary-btn">儲存修改</button>
+          <button type="button" data-action="cancel-edit">取消</button>
+        </div>
+      </form>
+    </li>
+  `;
+}
+
+function attachEditFormHandlers() {
+  const form = wordListEl.querySelector('.edit-form');
+  if (!form) return;
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = form.dataset.id;
+    const target = words.find((w) => w.id === id);
+    if (!target) return;
+
+    const word = form.elements['word'].value.trim();
+    const reading = form.elements['reading'].value.trim();
+    const meaning = form.elements['meaning'].value.trim();
+    const note = form.elements['note'].value.trim();
+    if (!word || !meaning) return;
+
+    target.word = word;
+    target.reading = reading;
+    target.meaning = meaning;
+    target.note = note;
+    saveWords(words);
+
+    editingId = null;
+    renderList();
+  });
+
+  form.querySelector('[data-action="cancel-edit"]').addEventListener('click', () => {
+    editingId = null;
+    renderList();
   });
 }
 

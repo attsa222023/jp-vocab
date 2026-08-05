@@ -326,3 +326,31 @@ input:focus, textarea:focus {
   color: var(--danger);
   border-color: var(--danger);
 }
+
+.word-item-editing {
+  padding: 1rem;
+}
+
+.edit-form .field {
+  margin-bottom: 0.75rem;
+}
+
+.edit-form-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.edit-form-actions .primary-btn {
+  width: auto;
+  flex: 1;
+}
+
+.edit-form-actions button[data-action="cancel-edit"] {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+}
