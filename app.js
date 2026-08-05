@@ -4,7 +4,18 @@ const STORAGE_KEY = 'jpVocabWords';
 function loadWords() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list = raw ? JSON.parse(raw) : [];
+    // 舊資料沒有 addedAt（精確新增時間戳記），用陣列順序（原本的新增順序）補上，
+    // 這樣「由新到舊 / 由舊到新」排序在舊資料上也能維持正確的先後關係
+    let migrated = false;
+    list.forEach((w, i) => {
+      if (typeof w.addedAt !== 'number') {
+        w.addedAt = i;
+        migrated = true;
+      }
+    });
+    if (migrated) saveWords(list);
+    return list;
   } catch (e) {
     console.error('讀取資料失敗', e);
     return [];
@@ -50,6 +61,7 @@ function createWord({ word, reading, meaning, note }) {
     meaning,
     note: note || '',
     createdAt: today,
+    addedAt: Date.now(),
     srs: {
       interval: 0,      // 天數
       repetition: 0,    // 連續答對次數
@@ -223,21 +235,48 @@ function renderCard() {
 const wordListEl = document.getElementById('wordList');
 const searchInput = document.getElementById('searchInput');
 const wordCountEl = document.getElementById('wordCount');
+const sortSelect = document.getElementById('sortSelect');
 
 let editingId = null;
 
+const SORT_MODE_KEY = 'jpVocabSortMode';
+let sortMode = localStorage.getItem(SORT_MODE_KEY) || 'new';
+sortSelect.value = sortMode;
+
+// 假名排序用的排序器：兼顧平假名/片假名、濁音等日文排序規則
+const kanaCollator = new Intl.Collator('ja', { sensitivity: 'base' });
+
+function sortWords(list) {
+  const arr = [...list];
+  if (sortMode === 'old') {
+    arr.sort((a, b) => a.addedAt - b.addedAt);
+  } else if (sortMode === 'kana') {
+    arr.sort((a, b) => kanaCollator.compare(a.reading || a.word, b.reading || b.word));
+  } else {
+    // 預設：由新到舊
+    arr.sort((a, b) => b.addedAt - a.addedAt);
+  }
+  return arr;
+}
+
 searchInput.addEventListener('input', renderList);
+
+sortSelect.addEventListener('change', () => {
+  sortMode = sortSelect.value;
+  localStorage.setItem(SORT_MODE_KEY, sortMode);
+  renderList();
+});
 
 function renderList() {
   const q = searchInput.value.trim().toLowerCase();
-  const filtered = words
-    .filter((w) =>
+  const filtered = sortWords(
+    words.filter((w) =>
       !q ||
       w.word.toLowerCase().includes(q) ||
       w.reading.toLowerCase().includes(q) ||
       w.meaning.toLowerCase().includes(q)
     )
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  );
 
   wordCountEl.textContent = `共 ${words.length} 個單字`;
 

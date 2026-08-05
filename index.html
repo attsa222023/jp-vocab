@@ -50,6 +50,13 @@
     <section id="view-list" class="view">
       <div class="list-toolbar">
         <input id="searchInput" type="search" placeholder="搜尋單字、讀音、意思...">
+        <select id="sortSelect" aria-label="排序方式">
+          <option value="new">由新到舊</option>
+          <option value="old">由舊到新</option>
+          <option value="kana">假名順序（五十音）</option>
+        </select>
+      </div>
+      <div class="list-subbar">
         <span id="wordCount" class="count"></span>
       </div>
       <ul id="wordList" class="word-list"></ul>
