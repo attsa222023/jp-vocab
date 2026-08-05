@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日語單字本</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>日語單字本</h1>
+    <nav class="tabs">
+      <button class="tab-btn active" data-view="add">➕ 新增</button>
+      <button class="tab-btn" data-view="review">🔁 複習 <span id="dueBadge" class="badge" hidden>0</span></button>
+      <button class="tab-btn" data-view="list">📖 單字庫</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 新增單字 -->
+    <section id="view-add" class="view active">
+      <form id="addForm" class="card">
+        <div class="field">
+          <label for="word">單字 / 漢字</label>
+          <input id="word" type="text" placeholder="例：面倒くさい" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="reading">讀音（假名）</label>
+          <input id="reading" type="text" placeholder="例：めんどうくさい" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="meaning">意思</label>
+          <input id="meaning" type="text" placeholder="例：麻煩、嫌麻煩" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="note">備註 / 例句（選填）</label>
+          <textarea id="note" rows="2" placeholder="在哪裡遇到的？例句是什麼？"></textarea>
+        </div>
+        <button type="submit" class="primary-btn">儲存單字</button>
+        <p id="addFeedback" class="feedback" hidden></p>
+      </form>
+    </section>
+
+    <!-- 複習 -->
+    <section id="view-review" class="view">
+      <div id="reviewArea"></div>
+    </section>
+
+    <!-- 單字庫 -->
+    <section id="view-list" class="view">
+      <div class="list-toolbar">
+        <input id="searchInput" type="search" placeholder="搜尋單字、讀音、意思...">
+        <span id="wordCount" class="count"></span>
+      </div>
+      <ul id="wordList" class="word-list"></ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
