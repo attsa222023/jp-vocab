@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>日語單字本</title>
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#b5473a">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
 </head>
 <body>
   <header class="topbar">
@@ -66,6 +70,17 @@
     <!-- 跨裝置同步 -->
     <section id="view-sync" class="view">
       <div id="syncArea" class="card"></div>
+
+      <div class="card backup-card">
+        <h2 class="section-title">手動備份</h2>
+        <p class="hint">不想用雲端同步，也可以手動把資料存成檔案，之後在其他裝置或瀏覽器匯入（會與現有資料合併，不會覆蓋掉）。</p>
+        <div class="backup-actions">
+          <button id="exportBtn" type="button" class="secondary-btn">匯出成 JSON 檔案</button>
+          <button id="importBtn" type="button" class="secondary-btn">從檔案匯入</button>
+        </div>
+        <input id="importFileInput" type="file" accept="application/json" hidden>
+        <p id="backupFeedback" class="sync-status" hidden></p>
+      </div>
     </section>
   </main>
 

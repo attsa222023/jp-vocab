@@ -1,0 +1,14 @@
+{
+  "name": "日語單字本",
+  "short_name": "單字本",
+  "description": "記錄偶然遇到的日語單字，用間隔重複複習",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f5f2",
+  "theme_color": "#b5473a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

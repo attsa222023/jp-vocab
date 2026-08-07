@@ -596,6 +596,102 @@ function renderSync() {
   }
 }
 
+// ---- 手動備份（匯出／匯入 JSON）----
+const backupFeedback = document.getElementById('backupFeedback');
+
+function showBackupFeedback(text, isError) {
+  backupFeedback.textContent = text;
+  backupFeedback.style.color = isError ? 'var(--danger)' : '';
+  backupFeedback.hidden = false;
+}
+
+function exportWordsToFile() {
+  const blob = new Blob([JSON.stringify(words, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `jp-vocab-backup-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showBackupFeedback(`已匯出 ${words.length} 個單字。`);
+}
+
+// 把匯入的資料補齊成完整的單字物件，缺欄位就用預設值，避免舊格式或手動編輯過的檔案匯入時壞掉
+function normalizeImportedWord(raw) {
+  const today = todayStr();
+  const word = typeof raw?.word === 'string' ? raw.word.trim() : '';
+  const meaning = typeof raw?.meaning === 'string' ? raw.meaning.trim() : '';
+  if (!word || !meaning) return null;
+
+  const srsRaw = raw.srs && typeof raw.srs === 'object' ? raw.srs : {};
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+    word,
+    reading: typeof raw.reading === 'string' ? raw.reading.trim() : '',
+    meaning,
+    note: typeof raw.note === 'string' ? raw.note.trim() : '',
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : today,
+    addedAt: typeof raw.addedAt === 'number' ? raw.addedAt : Date.now(),
+    srs: {
+      interval: Number.isFinite(srsRaw.interval) ? srsRaw.interval : 0,
+      repetition: Number.isFinite(srsRaw.repetition) ? srsRaw.repetition : 0,
+      easeFactor: Number.isFinite(srsRaw.easeFactor) ? srsRaw.easeFactor : 2.5,
+      dueDate: typeof srsRaw.dueDate === 'string' ? srsRaw.dueDate : today,
+    },
+  };
+}
+
+function importWordsFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(reader.result);
+    } catch {
+      showBackupFeedback('匯入失敗：這不是有效的 JSON 檔案。', true);
+      return;
+    }
+    if (!Array.isArray(parsed)) {
+      showBackupFeedback('匯入失敗：檔案內容格式不對（應該是單字清單）。', true);
+      return;
+    }
+    const normalized = parsed.map(normalizeImportedWord).filter(Boolean);
+    if (normalized.length === 0) {
+      showBackupFeedback('匯入失敗：檔案裡沒有找到有效的單字資料。', true);
+      return;
+    }
+    const beforeCount = words.length;
+    words = mergeWordsById(words, normalized);
+    saveWords(words);
+    refreshDueBadge();
+    renderList();
+    showBackupFeedback(`匯入完成，新增了 ${words.length - beforeCount} 個單字（目前共 ${words.length} 個）。`);
+  };
+  reader.onerror = () => showBackupFeedback('匯入失敗：讀取檔案時發生錯誤。', true);
+  reader.readAsText(file, 'utf-8');
+}
+
+document.getElementById('exportBtn').addEventListener('click', exportWordsToFile);
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) importWordsFromFile(file);
+  e.target.value = ''; // 允許重複選同一個檔案再匯入一次
+});
+
+// ---- PWA：註冊 service worker，讓應用程式可以安裝到主畫面、離線也能開 ----
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.error('Service worker 註冊失敗', err);
+    });
+  });
+}
+
 // ---- 初始化 ----
 refreshDueBadge();
 renderList();

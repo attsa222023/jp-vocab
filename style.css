@@ -396,6 +396,25 @@ input:focus, textarea:focus {
   margin: 1.25rem 0;
 }
 
+.backup-card {
+  margin-top: 1rem;
+}
+
+.section-title {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.backup-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0.9rem 0 0;
+}
+
+.backup-actions .secondary-btn {
+  margin-top: 0;
+}
+
 .word-item-editing {
   padding: 1rem;
 }
