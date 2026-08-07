@@ -13,6 +13,7 @@
       <button class="tab-btn active" data-view="add">➕ 新增</button>
       <button class="tab-btn" data-view="review">🔁 複習 <span id="dueBadge" class="badge" hidden>0</span></button>
       <button class="tab-btn" data-view="list">📖 單字庫</button>
+      <button class="tab-btn" data-view="sync">☁️ 同步</button>
     </nav>
   </header>
 
@@ -61,8 +62,13 @@
       </div>
       <ul id="wordList" class="word-list"></ul>
     </section>
+
+    <!-- 跨裝置同步 -->
+    <section id="view-sync" class="view">
+      <div id="syncArea" class="card"></div>
+    </section>
   </main>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

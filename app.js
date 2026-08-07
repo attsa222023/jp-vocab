@@ -1,5 +1,28 @@
+// ---- 跨裝置同步（Firestore）----
+import { db } from './firebase-init.js';
+import {
+  doc,
+  setDoc,
+  getDoc,
+  onSnapshot,
+  serverTimestamp,
+} from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
+
+function syncDocRef(code) {
+  return doc(db, 'vocabSyncs', code);
+}
+
 // ---- 資料儲存 ----
 const STORAGE_KEY = 'jpVocabWords';
+const SYNC_CODE_KEY = 'jpVocabSyncCode';
+
+// 這幾個同步用的狀態變數要放在 loadWords()/saveWords() 之前宣告，
+// 因為 loadWords() 內可能會呼叫到 saveWords() -> queueCloudPush()，
+// 若 syncCode 還沒宣告（let 的暫時死區）會直接噴錯。
+let syncCode = localStorage.getItem(SYNC_CODE_KEY) || null;
+let syncUnsubscribe = null;
+let syncStatusText = syncCode ? '連線中...' : '尚未連結';
+let pushTimer = null;
 
 function loadWords() {
   try {
@@ -24,6 +47,7 @@ function loadWords() {
 
 function saveWords(words) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+  queueCloudPush();
 }
 
 let words = loadWords();
@@ -144,6 +168,7 @@ tabBtns.forEach((btn) => {
 
     if (btn.dataset.view === 'review') renderReview();
     if (btn.dataset.view === 'list') renderList();
+    if (btn.dataset.view === 'sync') renderSync();
   });
 });
 
@@ -402,6 +427,176 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// ---- 跨裝置同步畫面 ----
+const syncArea = document.getElementById('syncArea');
+
+function generateSyncCode() {
+  // 排除容易看錯的字元（0/O、1/I/L）
+  const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 8; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return code;
+}
+
+// 合併本機與雲端的單字清單：以 id 為準，重複時保留本機版本
+// （本機通常是剛做完編輯、最新的那份）
+function mergeWordsById(localList, cloudList) {
+  const map = new Map();
+  cloudList.forEach((w) => map.set(w.id, w));
+  localList.forEach((w) => map.set(w.id, w));
+  return [...map.values()];
+}
+
+function setSyncStatus(text) {
+  syncStatusText = text;
+  if (document.getElementById('view-sync').classList.contains('active')) renderSync();
+}
+
+function queueCloudPush() {
+  if (!syncCode) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    setDoc(syncDocRef(syncCode), { words, updatedAt: serverTimestamp() })
+      .then(() => setSyncStatus(`已同步（${new Date().toLocaleTimeString('zh-TW')} 更新）`))
+      .catch((err) => {
+        console.error('推送同步失敗', err);
+        setSyncStatus('同步失敗，請檢查網路連線');
+      });
+  }, 400);
+}
+
+function applyRemoteWords(remoteWords) {
+  words = remoteWords;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+  refreshDueBadge();
+  const activeView = document.querySelector('.view.active')?.id;
+  if (activeView === 'view-list') renderList();
+  if (activeView === 'view-review') renderReview();
+}
+
+function attachSyncListener() {
+  if (syncUnsubscribe) syncUnsubscribe();
+  const listeningToCode = syncCode;
+  syncUnsubscribe = onSnapshot(
+    syncDocRef(listeningToCode),
+    (snap) => {
+      if (syncCode !== listeningToCode) return; // 這個監聽器已經過期（換了/取消了同步碼），忽略
+      if (!snap.exists() || snap.metadata.hasPendingWrites) return; // 自己剛寫入的，不用處理
+      const data = snap.data();
+      if (!data || !Array.isArray(data.words)) return;
+      applyRemoteWords(data.words);
+      setSyncStatus(`已同步（${new Date().toLocaleTimeString('zh-TW')} 更新）`);
+    },
+    (err) => {
+      console.error('同步監聽失敗', err);
+      setSyncStatus('同步連線中斷，請檢查網路');
+    }
+  );
+}
+
+async function startNewSync() {
+  const code = generateSyncCode();
+  setSyncStatus('建立中...');
+  try {
+    await setDoc(syncDocRef(code), { words, updatedAt: serverTimestamp() });
+    syncCode = code;
+    localStorage.setItem(SYNC_CODE_KEY, code);
+    attachSyncListener();
+    setSyncStatus('已連結，正在即時同步');
+  } catch (err) {
+    console.error('建立同步失敗', err);
+    setSyncStatus('建立失敗，請檢查網路連線');
+  }
+  renderSync();
+}
+
+async function joinSync(rawCode) {
+  const code = rawCode.trim().toUpperCase();
+  if (!code) return;
+  setSyncStatus('連結中...');
+  renderSync();
+  try {
+    const snap = await getDoc(syncDocRef(code));
+    if (!snap.exists()) {
+      setSyncStatus('找不到這組同步碼，請確認輸入是否正確');
+      renderSync();
+      return;
+    }
+    const cloudWords = Array.isArray(snap.data().words) ? snap.data().words : [];
+    words = mergeWordsById(words, cloudWords);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+    await setDoc(syncDocRef(code), { words, updatedAt: serverTimestamp() });
+
+    syncCode = code;
+    localStorage.setItem(SYNC_CODE_KEY, code);
+    attachSyncListener();
+    setSyncStatus('已連結，正在即時同步');
+    refreshDueBadge();
+    renderList();
+  } catch (err) {
+    console.error('連結同步失敗', err);
+    setSyncStatus('連結失敗，請檢查網路連線與同步碼是否正確');
+  }
+  renderSync();
+}
+
+function disconnectSync() {
+  if (syncUnsubscribe) {
+    syncUnsubscribe();
+    syncUnsubscribe = null;
+  }
+  syncCode = null;
+  localStorage.removeItem(SYNC_CODE_KEY);
+  setSyncStatus('尚未連結');
+  renderSync();
+}
+
+function renderSync() {
+  if (syncCode) {
+    syncArea.innerHTML = `
+      <p class="sync-status">${escapeHtml(syncStatusText)}</p>
+      <div class="field">
+        <label>這台裝置的同步碼</label>
+        <div class="sync-code-display">
+          <span class="sync-code">${escapeHtml(syncCode)}</span>
+          <button type="button" id="copyCodeBtn">複製</button>
+        </div>
+      </div>
+      <p class="hint">在另一台裝置的「☁️ 同步」分頁輸入這組碼，就能看到同一份單字，並即時保持同步。</p>
+      <button type="button" id="disconnectBtn" class="secondary-btn">中斷同步（雲端資料不會刪除）</button>
+    `;
+    document.getElementById('copyCodeBtn').addEventListener('click', () => {
+      const btn = document.getElementById('copyCodeBtn');
+      navigator.clipboard?.writeText(syncCode).then(() => {
+        btn.textContent = '已複製！';
+        setTimeout(() => { btn.textContent = '複製'; }, 1500);
+      });
+    });
+    document.getElementById('disconnectBtn').addEventListener('click', () => {
+      if (confirm('確定要中斷這台裝置的同步嗎？（雲端上的資料仍會保留，之後可以用同一組碼重新連結）')) {
+        disconnectSync();
+      }
+    });
+  } else {
+    syncArea.innerHTML = `
+      <p>把這台裝置的單字同步到雲端，就能在其他裝置（電腦、手機）上看到同一份資料，並即時保持更新。</p>
+      <button type="button" id="startSyncBtn" class="primary-btn">產生同步碼，開始同步</button>
+      <hr class="divider">
+      <div class="field">
+        <label for="joinCodeInput">已經有同步碼了？輸入來連結這台裝置</label>
+        <input id="joinCodeInput" type="text" placeholder="例：7F3K9QXZ" maxlength="8" autocomplete="off" style="text-transform:uppercase;">
+      </div>
+      <button type="button" id="joinSyncBtn">連結</button>
+      <p class="sync-status">${escapeHtml(syncStatusText)}</p>
+    `;
+    document.getElementById('startSyncBtn').addEventListener('click', startNewSync);
+    document.getElementById('joinSyncBtn').addEventListener('click', () => {
+      joinSync(document.getElementById('joinCodeInput').value);
+    });
+  }
+}
+
 // ---- 初始化 ----
 refreshDueBadge();
 renderList();
+if (syncCode) attachSyncListener();
