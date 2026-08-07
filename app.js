@@ -284,34 +284,141 @@ function sortWords(list) {
   return arr;
 }
 
-searchInput.addEventListener('input', renderList);
+// ---- 五十音「行」篩選 ----
+const KANA_FILTER_KEY = 'jpVocabKanaFilter';
+let kanaRowFilter = localStorage.getItem(KANA_FILTER_KEY) || 'all';
+const KANA_ROWS = ['あ', 'か', 'さ', 'た', 'な', 'は', 'ま', 'や', 'ら', 'わ', 'ん'];
+
+// 片假名轉平假名（片假名範圍 0x30A1-0x30F6 對應平假名少 0x60）
+function toHiragana(ch) {
+  const code = ch.charCodeAt(0);
+  return code >= 0x30a1 && code <= 0x30f6 ? String.fromCharCode(code - 0x60) : ch;
+}
+
+// 把濁音、半濁音、拗音、促音等歸到對應的清音行，方便用「行」篩選
+const KANA_ROW_MAP = {
+  あ: 'あ', い: 'あ', う: 'あ', え: 'あ', お: 'あ',
+  ぁ: 'あ', ぃ: 'あ', ぅ: 'あ', ぇ: 'あ', ぉ: 'あ', ゔ: 'あ',
+  か: 'か', き: 'か', く: 'か', け: 'か', こ: 'か',
+  が: 'か', ぎ: 'か', ぐ: 'か', げ: 'か', ご: 'か',
+  さ: 'さ', し: 'さ', す: 'さ', せ: 'さ', そ: 'さ',
+  ざ: 'さ', じ: 'さ', ず: 'さ', ぜ: 'さ', ぞ: 'さ',
+  た: 'た', ち: 'た', つ: 'た', て: 'た', と: 'た', っ: 'た',
+  だ: 'た', ぢ: 'た', づ: 'た', で: 'た', ど: 'た',
+  な: 'な', に: 'な', ぬ: 'な', ね: 'な', の: 'な',
+  は: 'は', ひ: 'は', ふ: 'は', へ: 'は', ほ: 'は',
+  ば: 'は', び: 'は', ぶ: 'は', べ: 'は', ぼ: 'は',
+  ぱ: 'は', ぴ: 'は', ぷ: 'は', ぺ: 'は', ぽ: 'は',
+  ま: 'ま', み: 'ま', む: 'ま', め: 'ま', も: 'ま',
+  や: 'や', ゆ: 'や', よ: 'や', ゃ: 'や', ゅ: 'や', ょ: 'や',
+  ら: 'ら', り: 'ら', る: 'ら', れ: 'ら', ろ: 'ら',
+  わ: 'わ', ゐ: 'わ', ゑ: 'わ', を: 'わ', ゎ: 'わ',
+  ん: 'ん',
+};
+
+function getKanaRow(w) {
+  const source = w.reading || w.word;
+  if (!source) return null;
+  return KANA_ROW_MAP[toHiragana(source[0])] || null;
+}
+
+function renderKanaFilter() {
+  const kanaFilterEl = document.getElementById('kanaFilter');
+  const options = ['all', ...KANA_ROWS];
+  kanaFilterEl.innerHTML = options
+    .map((row) => {
+      const label = row === 'all' ? '全部' : `${row}行`;
+      const active = kanaRowFilter === row ? ' active' : '';
+      return `<button type="button" class="kana-btn${active}" data-row="${row}">${label}</button>`;
+    })
+    .join('');
+  kanaFilterEl.querySelectorAll('.kana-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      kanaRowFilter = btn.dataset.row;
+      localStorage.setItem(KANA_FILTER_KEY, kanaRowFilter);
+      currentPage = 1;
+      renderList();
+    });
+  });
+}
+
+// ---- 分頁 ----
+const PAGE_SIZE = 10;
+let currentPage = 1;
+
+function renderPagination(totalItems, totalPages) {
+  const paginationEl = document.getElementById('pagination');
+  if (totalItems <= PAGE_SIZE) {
+    paginationEl.innerHTML = '';
+    return;
+  }
+  paginationEl.innerHTML = `
+    <button type="button" id="prevPageBtn"${currentPage <= 1 ? ' disabled' : ''}>‹ 上一頁</button>
+    <span class="page-indicator">第 ${currentPage} / ${totalPages} 頁</span>
+    <button type="button" id="nextPageBtn"${currentPage >= totalPages ? ' disabled' : ''}>下一頁 ›</button>
+  `;
+  document.getElementById('prevPageBtn').addEventListener('click', () => {
+    if (currentPage > 1) {
+      currentPage -= 1;
+      renderList();
+    }
+  });
+  document.getElementById('nextPageBtn').addEventListener('click', () => {
+    if (currentPage < totalPages) {
+      currentPage += 1;
+      renderList();
+    }
+  });
+}
+
+searchInput.addEventListener('input', () => {
+  currentPage = 1;
+  renderList();
+});
 
 sortSelect.addEventListener('change', () => {
   sortMode = sortSelect.value;
   localStorage.setItem(SORT_MODE_KEY, sortMode);
+  currentPage = 1;
   renderList();
 });
 
 function renderList() {
   const q = searchInput.value.trim().toLowerCase();
-  const filtered = sortWords(
-    words.filter((w) =>
-      !q ||
-      w.word.toLowerCase().includes(q) ||
-      w.reading.toLowerCase().includes(q) ||
-      w.meaning.toLowerCase().includes(q)
-    )
+  let filtered = words.filter((w) =>
+    !q ||
+    w.word.toLowerCase().includes(q) ||
+    w.reading.toLowerCase().includes(q) ||
+    w.meaning.toLowerCase().includes(q)
   );
 
-  wordCountEl.textContent = `共 ${words.length} 個單字`;
+  if (kanaRowFilter !== 'all') {
+    filtered = filtered.filter((w) => getKanaRow(w) === kanaRowFilter);
+  }
+
+  filtered = sortWords(filtered);
+
+  renderKanaFilter();
+
+  wordCountEl.textContent = (q || kanaRowFilter !== 'all')
+    ? `符合 ${filtered.length} 個（共 ${words.length} 個單字）`
+    : `共 ${words.length} 個單字`;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
 
   if (filtered.length === 0) {
     wordListEl.innerHTML = `<div class="empty-state"><div class="big">📭</div><p>找不到符合的單字</p></div>`;
+    renderPagination(0, 1);
     return;
   }
 
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
   const today = todayStr();
-  wordListEl.innerHTML = filtered.map((w) => {
+  wordListEl.innerHTML = pageItems.map((w) => {
     if (w.id === editingId) return renderEditForm(w);
 
     const isDue = w.srs.dueDate <= today;
@@ -358,6 +465,8 @@ function renderList() {
   });
 
   if (editingId) attachEditFormHandlers();
+
+  renderPagination(filtered.length, totalPages);
 }
 
 function renderEditForm(w) {
